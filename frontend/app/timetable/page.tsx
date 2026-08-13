@@ -44,6 +44,16 @@ export default function TimetablePage() {
     },
   });
 
+  const { data: teachers = [] } = useQuery({
+    queryKey: ["teachers", selectedSchoolId],
+    queryFn: async () => (await api.get(`/teachers?school_id=${selectedSchoolId}`)).data,
+  });
+
+  const { data: classes = [] } = useQuery({
+    queryKey: ["classes", selectedSchoolId],
+    queryFn: async () => (await api.get(`/classes?school_id=${selectedSchoolId}`)).data,
+  });
+
   useEffect(() => {
     if (timetables.length > 0 && !selectedTimetableId) {
       const latest = timetables[0];
@@ -286,6 +296,61 @@ export default function TimetablePage() {
               {isGenerating ? "Çözülüyor..." : "Otomatik Program Oluştur"}
             </button>
           </div>
+        </div>
+
+        {/* Filtreler */}
+        <div className="flex flex-wrap gap-3 items-center bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-xs">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Filtrele:</span>
+
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-600 font-medium">Program:</label>
+            <select
+              value={selectedTimetableId || ""}
+              onChange={(e) => setSelectedTimetableId(Number(e.target.value) || null)}
+              className="rounded-lg border border-slate-300 text-xs px-2 py-1.5 bg-white"
+            >
+              {timetables.map((tt: any) => (
+                <option key={tt.id} value={tt.id}>{tt.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-600 font-medium">Sınıf:</label>
+            <select
+              value={filterClass || ""}
+              onChange={(e) => setFilterClass(Number(e.target.value) || undefined)}
+              className="rounded-lg border border-slate-300 text-xs px-2 py-1.5 bg-white"
+            >
+              <option value="">Tümü</option>
+              {classes.map((cls: any) => (
+                <option key={cls.id} value={cls.id}>{cls.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-600 font-medium">Öğretmen:</label>
+            <select
+              value={filterTeacher || ""}
+              onChange={(e) => setFilterTeacher(Number(e.target.value) || undefined)}
+              className="rounded-lg border border-slate-300 text-xs px-2 py-1.5 bg-white"
+            >
+              <option value="">Tümü</option>
+              {teachers.map((t: any) => (
+                <option key={t.id} value={t.id}>{t.full_name}</option>
+              ))}
+            </select>
+          </div>
+
+          {(filterClass || filterTeacher) && (
+            <button
+              onClick={() => { setFilterClass(undefined); setFilterTeacher(undefined); }}
+              className="text-xs text-red-500 hover:text-red-700 font-medium"
+            >
+              ✕ Filtreyi Temizle
+            </button>
+          )}
         </div>
 
         {/* Alerts */}

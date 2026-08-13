@@ -1,5 +1,6 @@
 """
 Celery application configuration.
+Redis/Celery is optional — the app falls back to thread-based execution when Redis is unavailable.
 """
 from celery import Celery
 from celery.schedules import crontab
@@ -26,6 +27,26 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # ─── Redis yokken bloke olmayı önle ────────────────────────────────────
+    # Startup'ta bağlantı denemesi yapma
+    broker_connection_retry_on_startup=False,
+    # Bağlantı kaybında sadece 1 retry, 1 saniye bekle, sonra exception fırlat
+    broker_connection_max_retries=1,
+    broker_connection_retry=False,
+    # Socket timeout'ları
+    broker_transport_options={
+        "max_retries": 1,
+        "interval_start": 0,
+        "interval_step": 0,
+        "interval_max": 1,
+        "socket_timeout": 2,
+        "socket_connect_timeout": 2,
+    },
+    result_backend_transport_options={
+        "socket_timeout": 2,
+        "socket_connect_timeout": 2,
+    },
+    # ───────────────────────────────────────────────────────────────────────
     task_routes={
         "app.tasks.solver_task.run_solver": {"queue": "solver"},
         "app.tasks.backup_task.run_backup": {"queue": "backup"},

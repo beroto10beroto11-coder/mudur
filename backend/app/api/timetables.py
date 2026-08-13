@@ -13,8 +13,9 @@ from app.models.assignment import CourseAssignment
 from app.models.class_ import ClassGroup
 from app.models.classroom import Classroom
 from app.models.course import Course
-from app.models.teacher import Teacher
+from app.models.teacher import Teacher, TeacherAvailability
 from app.models.timetable import Timetable, TimetableLesson, TimetableStatus, TimetableVersion
+from app.models.timeslot import TimeSlot
 from app.schemas.timetable import (
     TimetableGenerateRequest,
     TimetableLessonMoveRequest,
@@ -22,9 +23,92 @@ from app.schemas.timetable import (
     TimetableResponse,
     TimetableVersionResponse,
 )
-from app.tasks.solver_task import run_solver
+from app.tasks.solver_task import (
+    run_solver,
+    _build_scheduler_input,
+)
+from app.solver.scheduler.validator import validate_feasibility
 
 router = APIRouter(prefix="/timetables", tags=["Timetables"])
+
+
+@router.get("/validate", tags=["Timetables"])
+async def validate_timetable_feasibility(
+    school_id: int,
+    academic_year_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+):
+    """
+    Solver çalıştırmadan önce ön-doğrulama yapar.
+    Kapasite yetersizliği ve saat dengesizliği raporlarını döndürür.
+    Kritik ihlal yoksa solver çalıştırılabilir.
+    """
+    teachers_res = await db.execute(
+        select(Teacher).where(Teacher.school_id == school_id, Teacher.is_active == True)
+    )
+    teachers = list(teachers_res.scalars().all())
+
+    classes_res = await db.execute(
+        select(ClassGroup).where(ClassGroup.school_id == school_id, ClassGroup.is_active == True)
+    )
+    classes = list(classes_res.scalars().all())
+
+    asgns_res = await db.execute(
+        select(CourseAssignment)
+        .options(selectinload(CourseAssignment.course))
+        .where(
+            CourseAssignment.school_id == school_id,
+            CourseAssignment.academic_year_id == academic_year_id,
+            CourseAssignment.is_active == True,
+        )
+    )
+    assignments = list(asgns_res.scalars().all())
+
+    slots_res = await db.execute(
+        select(TimeSlot).where(
+            TimeSlot.academic_year_id == academic_year_id,
+            TimeSlot.is_active == True,
+        )
+    )
+    timeslots = list(slots_res.scalars().all())
+
+    avail_res = await db.execute(
+        select(TeacherAvailability).where(TeacherAvailability.academic_year_id == academic_year_id)
+    )
+    availabilities = list(avail_res.scalars().all())
+
+    try:
+        scheduler_input = _build_scheduler_input(
+            teachers=teachers,
+            classes=classes,
+            assignments=assignments,
+            timeslots=timeslots,
+            availabilities=availabilities,
+            school_id=school_id,
+        )
+        ihlaller = validate_feasibility(scheduler_input)
+    except Exception as e:
+        return {
+            "gecerli": False,
+            "hata": str(e),
+            "ihlaller": [],
+        }
+
+    kritik = [ih for ih in ihlaller if ih.tur == "YETERSIZ_OGRETMEN"]
+    return {
+        "gecerli": len(kritik) == 0,
+        "kritik_ihlal_sayisi": len(kritik),
+        "uyari_sayisi": len(ihlaller) - len(kritik),
+        "ihlaller": [
+            {
+                "tur": ih.tur,
+                "mesaj": ih.mesaj,
+                "detay": ih.detay,
+            }
+            for ih in ihlaller
+        ],
+    }
 
 
 @router.get("", response_model=list[TimetableResponse])
@@ -34,6 +118,7 @@ async def list_timetables(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: CurrentUser,
 ):
+    from sqlalchemy import func as sa_func
     query = select(Timetable).where(
         Timetable.school_id == school_id,
         Timetable.academic_year_id == academic_year_id,
@@ -41,6 +126,14 @@ async def list_timetables(
     )
     result = await db.execute(query)
     timetables = list(result.scalars().all())
+
+    # Enrich with real lessons_count
+    for tt in timetables:
+        count_res = await db.execute(
+            select(sa_func.count()).where(TimetableLesson.timetable_id == tt.id)
+        )
+        tt.lessons_count = count_res.scalar_one()
+
     return timetables
 
 
@@ -67,7 +160,12 @@ async def generate_timetable(
 
     celery_ok = False
     try:
-        task = run_solver.delay(tt_id, school_id, data.academic_year_id)
+        # apply_async ile timeout: Redis yoksa 2sn sonra exception -> thread fallback
+        task = run_solver.apply_async(
+            args=[tt_id, school_id, data.academic_year_id],
+            expires=3600,
+            time_limit=300,
+        )
         timetable.solver_job_id = task.id
         celery_ok = True
     except Exception:
@@ -95,10 +193,15 @@ async def get_timetable(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: CurrentUser,
 ):
+    from sqlalchemy import func as sa_func
     result = await db.execute(select(Timetable).where(Timetable.id == timetable_id))
     timetable = result.scalar_one_or_none()
     if not timetable:
         raise HTTPException(status_code=404, detail="Ders programı bulunamadı.")
+    count_res = await db.execute(
+        select(sa_func.count()).where(TimetableLesson.timetable_id == timetable_id)
+    )
+    timetable.lessons_count = count_res.scalar_one()
     return timetable
 
 
