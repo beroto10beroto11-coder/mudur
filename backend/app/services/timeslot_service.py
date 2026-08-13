@@ -25,7 +25,12 @@ class TimeSlotService:
 
         for d in range(data.days):
             current_time = base_time
-            for p in range(1, data.periods_per_day + 1):
+            periods_for_day = (
+                data.daily_periods[d]
+                if data.daily_periods and d < len(data.daily_periods)
+                else data.periods_per_day
+            )
+            for p in range(1, periods_for_day + 1):
                 end_time = current_time + timedelta(minutes=data.lesson_duration_minutes)
                 slot = TimeSlot(
                     school_id=school_id,

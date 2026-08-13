@@ -453,7 +453,7 @@ export default function TeachersPage() {
                             }`}
                           >
                             {isSel && <Check className="h-3.5 w-3.5 shrink-0" />}
-                            <span>{c.name}</span>
+                            <span>{c.name}{c.code ? ` (${c.code})` : ""}</span>
                           </button>
                         );
                       })}
@@ -661,7 +661,7 @@ export default function TeachersPage() {
                             }`}
                           >
                             {isSel && <Check className="h-3.5 w-3.5 shrink-0" />}
-                            <span>{c.name}</span>
+                            <span>{c.name}{c.code ? ` (${c.code})` : ""}</span>
                           </button>
                         );
                       })}

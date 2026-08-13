@@ -246,8 +246,23 @@ export default function TimetablePage() {
     refetchLessons();
   };
 
+  const { data: settings = [] } = useQuery({
+    queryKey: ["settings", selectedSchoolId],
+    queryFn: async () => {
+      if (!selectedSchoolId) return [];
+      const res = await api.get(`/settings?school_id=${selectedSchoolId}`);
+      return res.data;
+    },
+    enabled: !!selectedSchoolId,
+  });
+
+  const weeklyStructureSetting = settings.find((s: any) => s.key === "weekly_lesson_structure")?.value || "8+8+8+8+8";
+  const rawParts = weeklyStructureSetting.split("+").map((s: string) => Number(s.trim()) || 0);
+  const dailyPeriods = Array.from({ length: 5 }, (_, i) => (rawParts[i] !== undefined && rawParts[i] > 0 ? rawParts[i] : (rawParts[0] || 8)));
+  const maxPeriods = Math.max(...dailyPeriods, 1);
+
   const days = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"];
-  const periods = [1, 2, 3, 4, 5, 6, 7, 8];
+  const periods = Array.from({ length: maxPeriods }, (_, i) => i + 1);
 
   const getLessonAt = (day: number, period: number) => {
     if (pendingMove && pendingMove.day === day && pendingMove.period === period) {
@@ -418,6 +433,19 @@ export default function TimetablePage() {
                   <tr key={p} className="h-20">
                     <td className="border font-bold bg-slate-50 text-slate-600">{p}. Ders</td>
                     {days.map((_, dIdx) => {
+                      const dayMax = dailyPeriods[dIdx] || 8;
+                      const isDaySlotValid = p <= dayMax;
+                      if (!isDaySlotValid) {
+                        return (
+                          <td
+                            key={dIdx}
+                            className="border p-1.5 bg-slate-100/70 text-slate-400 font-medium select-none cursor-not-allowed text-xs"
+                            title="Bu günde bu ders saati tanımlı değil"
+                          >
+                            <span className="text-slate-400 font-semibold">— Ders Yok —</span>
+                          </td>
+                        );
+                      }
                       const lesson = getLessonAt(dIdx, p);
                       return (
                         <td

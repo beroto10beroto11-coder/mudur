@@ -26,6 +26,7 @@ from app.api import (
     teachers,
     timetables,
     timeslots,
+    scheduler as scheduler_api,
 )
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
@@ -117,6 +118,8 @@ app.include_router(backups.router, prefix="/api")
 app.include_router(announcements.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
 app.include_router(settings_api.router, prefix="/api")
+app.include_router(scheduler_api.router, prefix="/api")
+
 
 
 @app.get("/api/health", tags=["Health"])

@@ -14,6 +14,7 @@ class TimeSlotBatchCreate(BaseModel):
     academic_year_id: int
     days: int = 5
     periods_per_day: int = 8
+    daily_periods: list[int] | None = None
     start_time_str: str = "08:30"
     lesson_duration_minutes: int = 40
     break_duration_minutes: int = 10

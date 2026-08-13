@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSchoolStore } from "@/stores/schoolStore";
@@ -73,20 +73,43 @@ export default function CoursesPage() {
   };
 
   // Queries
-  const { data: courses = [], isLoading } = useQuery({
+  const { data: settings = [] } = useQuery({
+    queryKey: ["settings", selectedSchoolId],
+    queryFn: async () => {
+      if (!selectedSchoolId) return [];
+      const res = await api.get(`/settings?school_id=${selectedSchoolId}`);
+      return res.data;
+    },
+    enabled: !!selectedSchoolId,
+  });
+
+  useEffect(() => {
+    if (settings && Array.isArray(settings) && settings.length > 0) {
+      const setting = settings.find((s: any) => s.key === "weekly_lesson_structure");
+      if (setting && setting.value) {
+        setWeeklyStructure(setting.value);
+      }
+    }
+  }, [settings]);
+
+  const { data: courses = [], isLoading, isError, error } = useQuery({
     queryKey: ["courses", selectedSchoolId],
     queryFn: async () => {
+      if (!selectedSchoolId) return [];
       const res = await api.get(`/courses?school_id=${selectedSchoolId}`);
       return res.data;
     },
+    enabled: !!selectedSchoolId,
   });
 
   const { data: classes = [] } = useQuery({
     queryKey: ["classes", selectedSchoolId],
     queryFn: async () => {
+      if (!selectedSchoolId) return [];
       const res = await api.get(`/classes?school_id=${selectedSchoolId}`);
       return res.data;
     },
+    enabled: !!selectedSchoolId,
   });
 
   // Save Weekly Structure
@@ -94,7 +117,7 @@ export default function CoursesPage() {
     setIsSavingStructure(true);
     try {
       const parts = weeklyStructure.split("+").map((s) => Number(s.trim()) || 0);
-      const maxPeriods = Math.max(...parts, 6);
+      const maxPeriods = Math.max(...parts, 1);
       await api.put(`/settings/weekly_lesson_structure?school_id=${selectedSchoolId}`, {
         key: "weekly_lesson_structure",
         value: weeklyStructure,
@@ -104,10 +127,14 @@ export default function CoursesPage() {
         academic_year_id: selectedAcademicYearId || 1,
         days: parts.length || 5,
         periods_per_day: maxPeriods,
+        daily_periods: parts,
         lesson_duration_minutes: 40,
         break_duration_minutes: 10,
         start_time_str: "08:30",
       });
+      queryClient.invalidateQueries({ queryKey: ["settings", selectedSchoolId] });
+      queryClient.invalidateQueries({ queryKey: ["timeslots"] });
+      queryClient.invalidateQueries({ queryKey: ["availability"] });
       setStructureStatus({ type: "success", text: "Haftalık ders yapısı ve zaman slotları kaydedildi!" });
       setTimeout(() => setStructureStatus(null), 4000);
     } catch (err: any) {
@@ -343,6 +370,12 @@ export default function CoursesPage() {
               {isLoading ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-slate-400">Yükleniyor...</td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-red-500 font-semibold">
+                    Dersler yüklenirken hata oluştu. Lütfen yeniden giriş yapın veya sayfayı yenileyin.
+                  </td>
                 </tr>
               ) : courses.length === 0 ? (
                 <tr>

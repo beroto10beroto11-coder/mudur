@@ -77,6 +77,7 @@ CREATE TABLE courses (
     created_at DATETIME, 
     updated_at DATETIME, 
     is_deleted BOOLEAN NOT NULL DEFAULT 0, 
+    deleted_at DATETIME, 
     FOREIGN KEY(school_id) REFERENCES schools (id) ON DELETE CASCADE, 
     CONSTRAINT uq_course_school_code UNIQUE (school_id, code)
 );

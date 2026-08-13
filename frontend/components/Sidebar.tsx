@@ -17,6 +17,7 @@ import {
   Database,
   FileText,
   Settings,
+  Zap,
 } from "lucide-react";
 
 const navigation = [
@@ -27,6 +28,7 @@ const navigation = [
   { name: "Derslikler", href: "/classrooms", icon: Building2 },
   { name: "Öğretmen Müsaitlik", href: "/availability", icon: Clock },
   { name: "Ders Programı", href: "/timetable", icon: Grid },
+  { name: "Otomatik Program", href: "/scheduler", icon: Zap },
   { name: "Nöbet Sistemi", href: "/duties", icon: ShieldCheck },
   { name: "Excel İçe Aktar", href: "/imports", icon: Upload },
   { name: "Excel / PDF Dışa Aktar", href: "/exports", icon: Download },
