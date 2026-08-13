@@ -81,8 +81,11 @@ export default function AvailabilityPage() {
     setHasUnsavedChanges(true);
   };
 
+  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!selectedTeacherId) throw new Error("Lütfen bir öğretmen seçin.");
       const unavailabilities: any[] = [];
       for (let d = 0; d < 5; d++) {
         for (let p = 1; p <= 8; p++) {
@@ -95,13 +98,19 @@ export default function AvailabilityPage() {
 
       return api.post("/availability/batch", {
         teacher_id: selectedTeacherId,
-        academic_year_id: selectedAcademicYearId,
+        academic_year_id: selectedAcademicYearId || 1,
         unavailabilities,
       });
     },
     onSuccess: () => {
       setHasUnsavedChanges(false);
+      setStatusMessage({ type: "success", text: "Müsaitlik bilgileri başarıyla kaydedildi!" });
       queryClient.invalidateQueries({ queryKey: ["availability"] });
+      setTimeout(() => setStatusMessage(null), 4000);
+    },
+    onError: (err: any) => {
+      const detail = err.response?.data?.detail || err.message;
+      setStatusMessage({ type: "error", text: typeof detail === "string" ? detail : "Müsaitlik bilgileri kaydedilemedi." });
     },
   });
 
@@ -118,7 +127,20 @@ export default function AvailabilityPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {hasUnsavedChanges && (
+            {statusMessage && (
+              <span
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                  statusMessage.type === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-red-200 bg-red-50 text-red-800"
+                }`}
+              >
+                {statusMessage.type === "success" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <X className="h-3.5 w-3.5 text-red-600" />}
+                {statusMessage.text}
+              </span>
+            )}
+
+            {hasUnsavedChanges && !statusMessage && (
               <span className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
                 <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping"></span>
                 Değişiklik Var
@@ -127,8 +149,8 @@ export default function AvailabilityPage() {
 
             <button
               onClick={() => saveMutation.mutate()}
-              disabled={!selectedTeacherId || !hasUnsavedChanges || saveMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition disabled:opacity-40 shadow-xs"
+              disabled={!selectedTeacherId || saveMutation.isPending}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition disabled:opacity-40 shadow-xs cursor-pointer"
             >
               {saveMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

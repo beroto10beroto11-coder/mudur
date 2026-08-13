@@ -26,7 +26,6 @@ const navigation = [
   { name: "Dersler", href: "/courses", icon: BookOpen },
   { name: "Derslikler", href: "/classrooms", icon: Building2 },
   { name: "Öğretmen Müsaitlik", href: "/availability", icon: Clock },
-  { name: "Zaman Slotları", href: "/timeslots", icon: Grid },
   { name: "Ders Programı", href: "/timetable", icon: Grid },
   { name: "Nöbet Sistemi", href: "/duties", icon: ShieldCheck },
   { name: "Excel İçe Aktar", href: "/imports", icon: Upload },

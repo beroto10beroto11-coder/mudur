@@ -44,18 +44,30 @@ def _parse_hour_distribution(
     weekly_hours: int,
 ) -> list:
     """
-    "2+2+1+1" -> [2, 2, 1, 1]
-    Parse edilemezse weekly_hours adet 1'lik blok dondurur.
+    "2+2+2" -> [2, 2, 2]
+    "2+2+1" -> [2, 2, 1]
+    Parse edilemezse veya toplamı weekly_hours ile uyuşmazsa akıllı varsayılan bloklar döndürür.
     """
     if hour_distribution:
-        parts = re.split(r"[+,\s]+", hour_distribution.strip())
-        try:
-            dist = [int(p) for p in parts if p]
-            if dist and sum(dist) == weekly_hours:
-                return dist
-        except (ValueError, TypeError):
-            pass
-    return [1] * weekly_hours
+        options = [opt.strip() for opt in hour_distribution.split(",") if opt.strip()]
+        for opt in options:
+            parts = re.split(r"[+\s]+", opt)
+            try:
+                dist = [int(p) for p in parts if p]
+                if dist and sum(dist) == weekly_hours and all(p > 0 for p in dist):
+                    return dist
+            except (ValueError, TypeError):
+                pass
+
+    if weekly_hours <= 0:
+        return [1]
+    twos = weekly_hours // 2
+    ones = weekly_hours % 2
+    res = [2] * twos
+    if ones > 0:
+        res.append(1)
+    return res
+
 
 
 # ---------------------------------------------------------------------------

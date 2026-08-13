@@ -51,7 +51,7 @@ class Course(TimestampMixin, SoftDeleteMixin, Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("school_id", "name", name="uq_course_school_name"),
+        UniqueConstraint("school_id", "code", name="uq_course_school_code"),
         Index("ix_courses_school_id", "school_id"),
         Index("ix_courses_branch", "branch"),
     )
