@@ -129,7 +129,14 @@ export default function TimetablePage() {
           const data = JSON.parse(event.data);
           if (data.percent) setProgress(Math.min(95, data.percent));
           if (data.status === "GENERATED" || data.status === "FAILED") {
-            finishGeneration(data.status === "GENERATED");
+            // Fetch solver_conflicts for detailed error message on FAILED
+            if (data.status === "FAILED") {
+              api.get(`/timetables/${ttId}`).then(r => {
+                finishGeneration(false, r.data?.solver_conflicts);
+              }).catch(() => finishGeneration(false, null));
+            } else {
+              finishGeneration(true, null);
+            }
             ws.close();
           }
         } catch {}
@@ -162,9 +169,9 @@ export default function TimetablePage() {
         setProgress((p) => Math.min(92, p + 4));
 
         if (status === "GENERATED") {
-          finishGeneration(true);
+          finishGeneration(true, null);
         } else if (status === "FAILED") {
-          finishGeneration(false);
+          finishGeneration(false, res.data?.solver_conflicts);
         }
       } catch {
         // keep polling
@@ -172,7 +179,7 @@ export default function TimetablePage() {
     }, 3000);
   };
 
-  const finishGeneration = (success: boolean) => {
+  const finishGeneration = (success: boolean, solverConflicts: Record<string, unknown> | null | undefined) => {
     setIsGenerating(false);
     setProgress(100);
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
@@ -183,7 +190,23 @@ export default function TimetablePage() {
       setSuccessMessage("✅ Ders programı başarıyla oluşturuldu!");
       setTimeout(() => setSuccessMessage(""), 5000);
     } else {
-      setErrorMessage("❌ Solver çözüm bulamadı. Lütfen ders atamalarını ve müsaitlik ayarlarını kontrol edin.");
+      // Show detailed error from solver_conflicts if available
+      let msg = "❌ Solver çözüm bulamadı.";
+      if (solverConflicts) {
+        const teshis = solverConflicts.teshis as string[] | undefined;
+        const ihlaller = solverConflicts.ihlaller as Array<{tur: string; mesaj: string}> | undefined;
+        if (teshis && teshis.length > 0) {
+          // Show first 3 diagnosis messages
+          const lines = teshis.slice(0, 3).join(" | ");
+          msg = `❌ Solver çözüm bulamadı: ${lines}`;
+        } else if (ihlaller && ihlaller.length > 0) {
+          const lines = ihlaller.slice(0, 3).map(i => i.mesaj).join(" | ");
+          msg = `❌ Solver çözüm bulamadı: ${lines}`;
+        } else if (solverConflicts.error) {
+          msg = `❌ Solver hatası: ${solverConflicts.error}`;
+        }
+      }
+      setErrorMessage(msg);
     }
   };
 
