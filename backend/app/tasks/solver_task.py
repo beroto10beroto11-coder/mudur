@@ -190,27 +190,14 @@ def _build_scheduler_input(
         if 0 <= period_idx < len(day_list):
             day_list[period_idx] = av.available
 
-    # Ogretmenler
-    ogretmenler_list = []
-    for t in teachers:
-        branslar = _extract_branslar(t)
-        girebilecegi = _extract_girebilecegi_subeler(t, classes)
-        ogretmenler_list.append(Ogretmen(
-            ogretmen_id=str(t.id),
-            ad=t.first_name,
-            soyad=t.last_name,
-            branslar=branslar,
-            girebilecegi_subeler=girebilecegi,
-            musaitlik=avail_map[t.id],
-        ))
-
-    # Dersler
     course_to_subeler = defaultdict(set)
     for asgn in assignments:
         course_to_subeler[asgn.course_id].add(str(asgn.class_id))
 
     dersler_list = []
     seen_course_ids = set()
+    # course_id -> ders.kod eslesmesi (ogretmen brans zenginlestirme icin)
+    course_id_to_kod: dict[int, str] = {}
 
     for asgn in assignments:
         cid = asgn.course_id
@@ -226,6 +213,7 @@ def _build_scheduler_input(
         weekly_hours = asgn.weekly_hours or (course.weekly_hours or 1)
         gunluk_dagilim = _parse_hour_distribution(course.hour_distribution, weekly_hours)
         kod = _extract_ders_kodu(course)
+        course_id_to_kod[cid] = kod
 
         try:
             ders = Ders(
@@ -250,6 +238,34 @@ def _build_scheduler_input(
                 dersler_list.append(ders)
             except Exception:
                 pass
+
+    # Ogretmen -> atanmis ders kodlari eslesmesi (assignments uzerinden)
+    # Bu, _synthesize_assignments veya gercek CourseAssignment'lardan gelen
+    # atama bilgisini solver'a tasir.
+    teacher_assigned_kodlar: dict[int, set] = defaultdict(set)
+    for asgn in assignments:
+        if asgn.teacher_id and asgn.course_id in course_id_to_kod:
+            teacher_assigned_kodlar[asgn.teacher_id].add(
+                course_id_to_kod[asgn.course_id]
+            )
+
+    # Ogretmenler
+    ogretmenler_list = []
+    for t in teachers:
+        branslar = _extract_branslar(t)
+        # Atama bilgisinden gelen ders kodlarini da brans listesine ekle
+        for kod in teacher_assigned_kodlar.get(t.id, set()):
+            if kod not in branslar:
+                branslar.append(kod)
+        girebilecegi = _extract_girebilecegi_subeler(t, classes)
+        ogretmenler_list.append(Ogretmen(
+            ogretmen_id=str(t.id),
+            ad=t.first_name,
+            soyad=t.last_name,
+            branslar=branslar,
+            girebilecegi_subeler=girebilecegi,
+            musaitlik=avail_map[t.id],
+        ))
 
     return SchedulerInput(
         zaman_yapisi=zaman_yapisi,
