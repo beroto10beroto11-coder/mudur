@@ -142,9 +142,11 @@ def _add_hard_constraints(
     # C6: Aynı dersin blokları farklı günlerde olmalı
     _c6_bloklar_farkli_gun(model, inp, x_vars, num_gunler)
 
-    # C7: Öğretmen yalnızca branşı ve izinli şubeleri için y=1 olabilir
-    # (y_vars oluşturulurken zaten filtrelendi; ancak x ile bağ kurulmalı)
-    # Bu kısıt C2 içinde zaten sağlanıyor.
+    # C7: Öğretmen haftalık max ders saati (şartname C4)
+    _c7_ogretmen_haftalik_maks(model, inp, x_vars, y_vars, gunler, gun_saatleri, num_gunler)
+
+    # C8: Şube doluluk kısıtı — tüm slotlar dolu olmalı (şartname A1 güçlendirme)
+    _c8_sube_doluluk(model, inp, x_vars, gunler, gun_saatleri, num_gunler)
 
 
 def _c1_blok_tam_atama(
@@ -384,6 +386,72 @@ def _c6_bloklar_farkli_gun(model, inp, x_vars, num_gunler):
 
                 if len(gun_blok_x) > 1:
                     model.add(sum(gun_blok_x) <= 1)
+
+
+def _c7_ogretmen_haftalik_maks(
+    model, inp, x_vars, y_vars, gunler, gun_saatleri, num_gunler
+):
+    """
+    Şartname C4: Öğretmenin haftalık toplam ders saati,
+    haftalik_max_ders_saati değerini aşamaz.
+    0 = sınırsız (kısıt uygulanmaz).
+    """
+    for o in inp.ogretmenler:
+        if o.haftalik_max_ders_saati <= 0:
+            continue  # Sınırsız
+
+        # Bu öğretmenin atandığı tüm (ders, sube, blok) ikililerinin
+        # saat katkılarını topla.
+        haftalik_saat_listesi = []
+
+        for ders in inp.dersler:
+            if ders.kod not in o.branslar:
+                continue
+            for sube_id in ders.gecerli_sube_ids:
+                if sube_id not in o.girebilecegi_subeler:
+                    continue
+
+                for blok_idx, blok_uzunluk in enumerate(ders.gunluk_dagilim):
+                    y_key = (ders.ders_id, sube_id, blok_idx, o.ogretmen_id)
+                    if y_key not in y_vars:
+                        continue
+                    y_var = y_vars[y_key]
+                    # Bu öğretmen bu bloğu veriyorsa blok_uzunluk saat ekler
+                    haftalik_saat_listesi.append(y_var * blok_uzunluk)
+
+        if haftalik_saat_listesi:
+            model.add(
+                sum(haftalik_saat_listesi) <= o.haftalik_max_ders_saati
+            )
+
+
+def _c8_sube_doluluk(
+    model, inp, x_vars, gunler, gun_saatleri, num_gunler
+):
+    """
+    Şartname A1 güçlendirme: Her şubenin her (gün, saat) hücresi dolu olmalı.
+    Her saat dilimi için, o saati kaplayan x değişkenlerinin toplamı == 1.
+    (C4_sube_cakisma_yok zaten <= 1 veriyor; burada == 1 ile doluluk zorlanır.)
+    """
+    for sube in inp.subeler:
+        sube_id = sube.sube_id
+        for g in range(num_gunler):
+            for h in range(gun_saatleri[g]):
+                kaplayan_x = []
+
+                for ders in inp.dersler:
+                    if sube_id not in ders.gecerli_sube_ids:
+                        continue
+                    for blok_idx, blok_uzunluk in enumerate(ders.gunluk_dagilim):
+                        for s in range(max(0, h - blok_uzunluk + 1), h + 1):
+                            if s + blok_uzunluk - 1 >= gun_saatleri[g]:
+                                continue
+                            key = (ders.ders_id, sube_id, blok_idx, g, s)
+                            if key in x_vars:
+                                kaplayan_x.append(x_vars[key])
+
+                if kaplayan_x:
+                    model.add(sum(kaplayan_x) == 1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

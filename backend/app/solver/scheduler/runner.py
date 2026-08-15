@@ -7,7 +7,8 @@ Tüm aşamaları koordine eden tek giriş noktası:
     2. Model kurulumu (build_model)
     3. CP-SAT çözümü
     4. Sonuç exportu (export_by_class + export_by_teacher)
-    5. INFEASIBLE durumunda teşhis (diagnose_infeasibility)
+    5. Çözüm sonrası doğrulama (validate_solution) — G1
+    6. INFEASIBLE durumunda teşhis (diagnose_infeasibility)
 """
 from __future__ import annotations
 
@@ -16,11 +17,12 @@ import time
 
 from ortools.sat.python import cp_model
 
-from app.solver.scheduler.models import SchedulerInput, SchedulerResult
+from app.solver.scheduler.models import SchedulerInput, SchedulerResult, FeasibilityIhlali
 from app.solver.scheduler.validator import validate_feasibility
 from app.solver.scheduler.model_builder import build_model
 from app.solver.scheduler.exporter import export_by_class, export_by_teacher
 from app.solver.scheduler.diagnostics import diagnose_infeasibility
+from app.solver.scheduler.post_validator import validate_solution
 
 
 def run_scheduler(inp: SchedulerInput) -> SchedulerResult:
@@ -73,13 +75,46 @@ def run_scheduler(inp: SchedulerInput) -> SchedulerResult:
     status = solver.solve(model)
     sure = time.perf_counter() - start
 
-    # ─── Aşama 5: Sonuç Üret ─────────────────────────────────────────────────
+    # ─── Aşama 5: Sonuç Üret ve Doğrula ──────────────────────────────────────
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         sube_prog = export_by_class(solver, x_vars, y_vars, inp)
         ogretmen_prog = export_by_teacher(solver, x_vars, y_vars, inp)
 
         durum_str = "OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE"
 
+        # ─── Aşama 5.5: Çözüm Sonrası Doğrulama (G1) ────────────────────────
+        # Şartname G1: Export'tan önce otomatik doğrulama yapılmalı.
+        # Bu doğrulamalardan biri bile başarısız olursa sonuç kesinlikle
+        # export edilmemeli, hata raporu üretilmelidir.
+        post_ihlaller = validate_solution(inp, sube_prog, ogretmen_prog)
+
+        if post_ihlaller:
+            # G1 ihlali var → çözüm geçersiz, export etme
+            post_ihlal_mesajlari = [
+                f"[{pi.kural}:{pi.tur}] {pi.mesaj}" for pi in post_ihlaller
+            ]
+            # Ön doğrulama uyarılarını da ekle
+            tum_ihlaller = [
+                ih for ih in ihlaller if ih.tur != "YETERSIZ_OGRETMEN"
+            ]
+            # Post validation ihlallerini FeasibilityIhlali formatına çevir
+            for pi in post_ihlaller:
+                tum_ihlaller.append(FeasibilityIhlali(
+                    tur=f"POST_VALIDATION_{pi.tur}",
+                    mesaj=f"[{pi.kural}] {pi.mesaj}",
+                    detay=pi.detay,
+                ))
+
+            return SchedulerResult(
+                basarili=False,
+                durum="VALIDATION_ERROR",
+                sure_saniye=round(sure, 3),
+                hedef_deger=solver.objective_value,
+                ihlaller=tum_ihlaller,
+                teshis_mesajlari=post_ihlal_mesajlari,
+            )
+
+        # Doğrulama geçti → başarılı sonuç döndür
         return SchedulerResult(
             basarili=True,
             durum=durum_str,
@@ -102,3 +137,4 @@ def run_scheduler(inp: SchedulerInput) -> SchedulerResult:
             ihlaller=ihlaller,
             teshis_mesajlari=teshis,
         )
+

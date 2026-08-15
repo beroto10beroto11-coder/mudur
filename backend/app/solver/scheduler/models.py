@@ -54,6 +54,11 @@ class Ogretmen(BaseModel):
     Anahtar: gün adı, Değer: o günün her saati için bool listesi.
     True = müsait, False = müsait değil.
     """
+    haftalik_max_ders_saati: int = 0
+    """
+    Öğretmenin haftalık maksimum ders saati (C4 kısıtı).
+    0 = sınırsız (kısıt uygulanmaz).
+    """
 
     @field_validator("musaitlik")
     @classmethod
